@@ -1,0 +1,332 @@
+
+	include "nesdefs.dasm"
+
+;;;;; VARIABLES
+
+	seg.u ZEROPAGE
+	org $0
+
+nmi_lockout	byte
+scroll_x	byte
+scroll_page	byte
+scroll_y	byte
+Temp		byte
+bg_tile_default	byte
+
+;;;;; NES CARTRIDGE HEADER
+
+	NES_HEADER 0,1,1,NES_MIRR_VERT ; mapper 0, 1 PRGs, 1 CHR
+
+;;;;; START OF CODE
+
+Start:	subroutine
+	NES_INIT	; set up stack pointer, turn off PPU
+        jsr WaitSync	; wait for VSYNC
+; CLEAR CPU RAM
+        ldx #$00
+        txa
+RAM_init_clear:
+	sta $000,x
+	sta $100,x
+	sta $200,x
+	sta $300,x
+	sta $400,x
+	sta $500,x
+	sta $600,x
+	sta $700,x
+        inx
+        bne RAM_init_clear
+;        jsr ClearRAM	; clear RAM
+        jsr WaitSync	; wait for VSYNC (and PPU warmup)
+; CLEAR PPU RAM
+	ldx #$00
+; set default clearing value here
+        lda #$00
+        sta bg_tile_default
+	PPU_SETADDR $2000
+PPU_init_clear_2000:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2000
+	PPU_SETADDR $2100
+        lda bg_tile_default
+PPU_init_clear_2100:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2100
+	PPU_SETADDR $2200
+        lda bg_tile_default
+PPU_init_clear_2200:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2200
+	PPU_SETADDR $2300
+        lda bg_tile_default
+PPU_init_clear_2300:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2300
+	PPU_SETADDR $2400
+        lda bg_tile_default
+PPU_init_clear_2400:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2400
+	PPU_SETADDR $2500
+        lda bg_tile_default
+PPU_init_clear_2500:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2500
+	PPU_SETADDR $2600
+        lda bg_tile_default
+PPU_init_clear_2600:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2600
+	PPU_SETADDR $2700
+        lda bg_tile_default
+PPU_init_clear_2700:
+        sta PPU_DATA
+        inx
+        bne PPU_init_clear_2700
+; MY SETUP
+        jsr tile_ram_clear
+        jsr SetPalette
+        jsr PleaseStart_plot
+; reset PPU address and scroll registers
+        lda #0
+        sta PPU_ADDR
+        sta PPU_ADDR	; PPU addr = $0000
+        sta PPU_SCROLL
+        sta PPU_SCROLL  ; PPU scroll = $0000
+; set some color attributes
+	PPU_SETADDR $23c0
+	lda #$1b
+        sta PPU_DATA
+        ldy #$0
+attr_shit_loop
+        sta PPU_DATA
+        iny
+        bne attr_shit_loop
+; activate PPU graphics       
+	; enable rendering
+        lda #MASK_BG|MASK_SPR
+        lda #$1e
+        sta PPU_MASK	
+        ; enable NMI
+        lda #$00
+        sta nmi_lockout
+        lda #CTRL_NMI
+        sta PPU_CTRL	
+.endless
+	jmp .endless	; endless loop
+
+; set palette colors
+SetPalette: subroutine
+; set PPU address to palette start
+	PPU_SETADDR $3f00
+        ldy #0
+.loop:
+	lda Palette00,y	; lookup byte in ROM
+	sta PPU_DATA	; store byte to PPU data
+        iny		; Y = Y + 1
+        cpy #32		; is Y equal to 32?
+	bne .loop	; not yet, loop
+        rts		; return to caller
+        
+tile_ram_clear:
+	PPU_SETADDR $2000
+        ldy #$0
+        lda #$32
+.tile_ram_clear_loop
+        sta PPU_DATA
+        iny
+        bne .tile_ram_clear_loop
+	PPU_SETADDR $2260
+        lda #$ef
+.tile_ram_clear_loop2
+        sta PPU_DATA
+        iny
+        bne .tile_ram_clear_loop2
+	PPU_SETADDR $2660
+        lda #$ef
+.tile_ram_clear_loop3
+        sta PPU_DATA
+        iny
+        bne .tile_ram_clear_loop3
+        rts
+        
+; fill video RAM with "Please START" msg
+PleaseStart_plot: subroutine
+; set PPU address to name table A (row 1, col 1)
+	PPU_SETADDR $2042
+	ldy #$0		; set Y counter to 0
+.loop:
+	lda PleaseStart_msg,y	; get next character
+        clc
+        adc #$60
+        beq .end	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loop	; loop
+.end
+	PPU_SETADDR $20b1
+	ldy #$0		; set Y counter to 0
+.loopb:
+	lda PleaseStart_msg,y	; get next character
+        clc
+        adc #$60
+        beq .endb	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loopb	; loop
+.endb
+	PPU_SETADDR $22a3
+	ldy #$0		; set Y counter to 0
+.loop2:
+	lda msg_hud_bar,y	; get next character
+        clc
+        adc #$60
+        beq .end2	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loop2	; loop
+.end2
+	PPU_SETADDR $22c3
+	ldy #$0		; set Y counter to 0
+.loop3:
+	lda msg_hud_text1,y	; get next character
+        clc
+        adc #$60
+        beq .end3	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loop3	; loop
+.end3
+	PPU_SETADDR $22e3
+	ldy #$0		; set Y counter to 0
+.loop4:
+	lda msg_hud_text2,y	; get next character
+        clc
+        adc #$60
+        beq .end4	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loop4	; loop
+.end4
+	PPU_SETADDR $2303
+	ldy #$0		; set Y counter to 0
+.loop5:
+	lda msg_hud_bar,y	; get next character
+        clc
+        adc #$60
+        beq .end5	; is 0? exit loop
+	sta PPU_DATA	; store+advance PPU
+        iny		; next character
+	bne .loop5	; loop
+.end5
+        rts		; return to caller
+        
+PleaseStart_msg:
+	.byte " Please START "
+        .byte #$a0
+        
+msg_hud_bar:
+	.byte "                          "
+        .byte #$a0
+msg_hud_text1:
+	.byte " I AM A Heads Up Display  "
+        .byte #$a0
+msg_hud_text2:
+	.byte "     BUTT i am beloW      "
+        .byte #$a0
+        
+        ; set sprite 0
+SetSprite0: subroutine
+        lda #158	;y
+	sta $200
+        lda #$f0	;tile
+        sta $201
+        lda #$20	;flags
+        sta $202
+        lda #$01	;xpos
+        sta $203
+	rts
+        
+        
+;;;;; COMMON SUBROUTINES
+
+	include "nesppu.dasm"
+
+;;;;; INTERRUPT HANDLERS
+
+NMIHandler: subroutine
+	SAVE_REGS
+	lda nmi_lockout
+        cmp #$00
+        bne .NMI_end
+        inc nmi_lockout
+; update scroll pos
+        inc scroll_y
+        bne .samepage
+        inc scroll_page
+.samepage
+	lda scroll_page
+        and #$01
+        ora #CTRL_NMI
+        sta PPU_CTRL
+; TOP SCROLL
+	bit PPU_STATUS
+        lda scroll_y
+        sta PPU_SCROLL
+        lda #$f8
+        sta PPU_SCROLL
+        jsr SetSprite0
+; load sprites
+	lda #$02
+        sta PPU_OAM_DMA
+        ; wait for sprite 0
+.wait0	bit PPU_STATUS
+        bvs .wait0
+        lda #$c0
+.wait1	bit PPU_STATUS
+        beq .wait1
+; HUD POSITIONING
+; set PPU_ADDR.1
+        bit PPU_STATUS
+; set PPU_SCROLL.1
+        lda #$00
+        sta PPU_SCROLL
+; set PPU_SCROLL.2
+        lda #$08
+        sta PPU_SCROLL
+; disable page 2 for HUD
+        ora #CTRL_NMI
+        sta PPU_CTRL
+        lda #$00
+        sta nmi_lockout
+.NMI_end
+	RESTORE_REGS
+	rti
+        
+
+        
+Palette00:
+	hex 1f		;screen color
+	hex 02283000	;background 0
+        hex 07162400	;background 1
+        hex 02113c00	;background 2
+        hex 0b1a3b1d	;background 3
+        hex 19293900	;sprite 0
+        hex 1a2a3a00	;sprite 1
+        hex 1b2b3b00	;sprite 2
+        hex 1c2c3c	;sprite 3
+
+;;;;; CPU VECTORS
+
+	NES_VECTORS
+
+;;;;; GRAPHX
+	org $10000
+	incbin "petscii.chr"
